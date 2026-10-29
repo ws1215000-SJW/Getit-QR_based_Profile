@@ -33,19 +33,23 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+
+function TabButton(props: TabTriggerSlotProps) {
+  // Pressable과 타입이 충돌하는 ref를 분리
+  const { ref: _ref, ...pressableProps } = props;
+
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable
+      {...pressableProps}
+      style={({ pressed }) =>
+        pressed ? styles.pressed : undefined
+      }
+    >
+      {props.children}
     </Pressable>
   );
 }
+
 
 export function CustomTabList(props: TabListProps) {
   const scheme = useColorScheme();
