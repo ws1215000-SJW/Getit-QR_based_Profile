@@ -1,0 +1,28 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### 비밀 정보 ###
+.env
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### VS Code ###
+.vscode/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### OS ###
+.DS_Store
+Thumbs.db
