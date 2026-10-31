@@ -17,7 +17,7 @@
 | 메서드 | 경로 | 기능 | 요청 데이터 | 성공 응답 | 주요 에러 코드 |
 |---|---|---|---|---|---|
 | POST | `/saved-profiles` | 상대방 프로필 저장 (QR 스캔) | Header: `X-Owner-Token`<br>Body: `{"targetProfileId": "UUID"}` | `201 Created`<br>`{"savedProfileId": 1, "message": "저장 완료"}` | `CANNOT_SAVE_SELF` (400)<br>`PROFILE_NOT_FOUND` (404)<br>`ALREADY_SAVED` (409) |
-| GET | `/saved-profiles` | 저장 목록 조회 및 검색 | Header: `X-Owner-Token`<br>Query: `search` | `200 OK`<br>저장된 프로필 목록 반환 | `UNAUTHORIZED` (401) |
+| GET | `/saved-profiles` | 저장 목록 조회 및 검색, 존댓말 필터링 | Header: `X-Owner-Token`<br>Query: `search`, `honorific`| `200 OK`<br>저장된 프로필 목록 반환 | `UNAUTHORIZED` (401) |
 | GET | `/saved-profiles/{id}` | 저장한 상대방의 상세 정보 조회 | Header: `X-Owner-Token` | `200 OK`<br>`{"savedProfileId": 1, "profile": {...}, "honorific": true, "memo": "메모 내용"}` | `SAVED_PROFILE_NOT_FOUND` (404)<br>`UNAUTHORIZED` (401) |
 | PATCH | `/saved-profiles/{id}` | 존댓말 설정 및 메모 수정 | Header: `X-Owner-Token`<br>Body: `{"honorific": false, "memo": "수정할 메모"}` | `200 OK`<br>`{"savedProfileId": 1, "honorific": false, "memo": "...", "updatedAt": "..."}` | `INVALID_INPUT` (400)<br>`SAVED_PROFILE_NOT_FOUND` (404) |
 
@@ -90,7 +90,7 @@
 }
 ```
 
-두 필드는 선택적으로 전달할 수 있으며, 전달한 필드만 수정.
+두 필드는 선택적으로 전달할 수 있으며, 전달한 필드만 수정. 메모는 최대 200자까지, 200자가 넘으면 INVALID_INPUT(400)으로 처리
 
 **Response (200 OK)**
 ```json
