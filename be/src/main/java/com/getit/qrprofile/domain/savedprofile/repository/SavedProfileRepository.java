@@ -21,7 +21,8 @@ public interface SavedProfileRepository extends JpaRepository<SavedProfile, Long
     @Query("SELECT s FROM SavedProfile s JOIN FETCH s.target t " +
             "WHERE s.owner.id = :ownerId " +
             "AND (:honorific IS NULL OR s.honorific = :honorific) " +
-            "AND (t.name LIKE CONCAT('%', :keyword, '%') OR " +
+            "AND (:keyword IS NULL OR :keyword = '' OR " +
+            "     t.name LIKE CONCAT('%', :keyword, '%') OR " +
             "     t.school LIKE CONCAT('%', :keyword, '%') OR " +
             "     t.department LIKE CONCAT('%', :keyword, '%')) " +
             "ORDER BY s.createdAt DESC")
