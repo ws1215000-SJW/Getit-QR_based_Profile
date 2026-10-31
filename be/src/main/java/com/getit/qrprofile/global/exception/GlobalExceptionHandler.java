@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -34,5 +36,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(ErrorCode.INVALID_INPUT.name(), ErrorCode.INVALID_INPUT.getMessage()));
+    }
+
+    /** 사진이 5MB를 넘는 경우 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleTooLarge(MaxUploadSizeExceededException e) {
+        ErrorCode code = ErrorCode.FILE_TOO_LARGE;
+        return ResponseEntity.status(code.getStatus())
+                .body(new ErrorResponse(code.name(), code.getMessage()));
+    }
+
+    /** multipart 요청에 file 필드가 없는 경우 */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingFile(MissingServletRequestPartException e) {
+        ErrorCode code = ErrorCode.INVALID_FILE;
+        return ResponseEntity.status(code.getStatus())
+                .body(new ErrorResponse(code.name(), code.getMessage()));
     }
 }

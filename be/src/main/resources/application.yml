@@ -2,6 +2,11 @@ spring:
   application:
     name: getit-qrprofile
 
+  servlet:
+    multipart:
+      max-file-size: 5MB      # 프로필 사진 최대 크기
+      max-request-size: 6MB
+
   # be/.env 파일에서 DB 접속 정보를 읽어옴 (.env는 git에 올리지 않음)
   config:
     import: optional:file:.env[.properties]
@@ -30,3 +35,9 @@ app:
   cors:
     # 프론트(Expo) 개발 주소. 여러 개면 쉼표로 구분
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8081,http://localhost:19006}
+
+  # 프로필 사진 저장소 (Supabase Storage). 값이 없어도 서버는 켜지고, 사진 API만 에러를 냄
+  supabase:
+    url: ${SUPABASE_URL:}
+    service-key: ${SUPABASE_SERVICE_KEY:}
+    bucket: ${SUPABASE_BUCKET:profile-photos}

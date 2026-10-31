@@ -25,8 +25,8 @@
 | GET | `/profiles/me` | 내 프로필 조회 | Header: `X-Owner-Token` | `200 OK`<br>프로필 객체 | `UNAUTHORIZED` (401) |
 | PUT | `/profiles/me` | 내 프로필 수정 | Header: `X-Owner-Token`<br>Body: 프로필 정보 | `200 OK`<br>수정된 프로필 객체 | `INVALID_INPUT` (400)<br>`UNAUTHORIZED` (401) |
 | GET | `/profiles/{id}` | QR 스캔 후 상대 프로필 조회 | 없음 (토큰 불필요) | `200 OK`<br>프로필 객체 | `INVALID_INPUT` (400)<br>`PROFILE_NOT_FOUND` (404) |
-| POST | `/profiles/me/photo` | 프로필 사진 업로드 | Header: `X-Owner-Token`<br>`multipart/form-data` (`file`) | `200 OK`<br>`{"photoUrl": "..."}` | 🚧 구현 예정 |
-| DELETE | `/profiles/me/photo` | 프로필 사진 삭제 | Header: `X-Owner-Token` | `204 No Content` | 🚧 구현 예정 |
+| POST | `/profiles/me/photo` | 프로필 사진 업로드 (교체) | Header: `X-Owner-Token`<br>`multipart/form-data` (`file`) | `200 OK`<br>`{"photoUrl": "..."}` | `INVALID_FILE` (400)<br>`FILE_TOO_LARGE` (400)<br>`UNAUTHORIZED` (401)<br>`STORAGE_ERROR` (502) |
+| DELETE | `/profiles/me/photo` | 프로필 사진 삭제 | Header: `X-Owner-Token` | `204 No Content` | `UNAUTHORIZED` (401) |
 
 ## 프로필 객체 (모든 응답 공통)
 
@@ -131,9 +131,36 @@ QR에서 읽은 `getit:profile:{id}`의 `{id}`로 호출한다. 저장하기 전
 
 **Response (200 OK):** 프로필 객체
 
-### 5. 프로필 사진 업로드 / 삭제 🚧
+### 5. POST `/profiles/me/photo` — 프로필 사진 업로드
 
-Supabase Storage 연동 후 구현 예정. 업로드 성공 시 `photoUrl`이 프로필 객체에 반영된다.
+- `multipart/form-data`, 필드 이름 `file`
+- 형식: jpg, png, webp, heic · 최대 5MB
+- 사진이 이미 있으면 새 사진으로 교체되고 이전 사진은 저장소에서 삭제됨
+- 프로필을 먼저 생성한 뒤(토큰을 받은 뒤) 호출해야 함
+
+**Response (200 OK)**
+```json
+{
+  "photoUrl": "https://{프로젝트}.supabase.co/storage/v1/object/public/profile-photos/{프로필ID}/{파일}.jpg"
+}
+```
+
+**프론트 예시 (Expo, expo-image-picker 결과 사용)**
+```js
+const form = new FormData();
+form.append("file", { uri: asset.uri, name: "photo.jpg", type: asset.mimeType ?? "image/jpeg" });
+
+const res = await fetch(`${API_URL}/profiles/me/photo`, {
+  method: "POST",
+  headers: { "X-Owner-Token": ownerToken }, // Content-Type은 직접 넣지 말 것 (자동 설정)
+  body: form,
+});
+const { photoUrl } = await res.json();
+```
+
+### 6. DELETE `/profiles/me/photo` — 프로필 사진 삭제
+
+`photoUrl`이 `null`이 되고 저장소의 파일도 삭제된다. 사진이 없을 때 호출해도 `204`.
 
 ## 프론트 연결 흐름
 
@@ -141,6 +168,7 @@ Supabase Storage 연동 후 구현 예정. 업로드 성공 시 `photoUrl`이 �
 앱 첫 실행 → getOrCreateQrId()로 UUID 생성
   → 프로필 작성 → POST /profiles (id + 입력값)
   → 응답의 ownerToken을 AsyncStorage에 저장
+  → (사진을 골랐다면) POST /profiles/me/photo
   → 이후: GET/PUT /profiles/me, /saved-profiles/* 요청에 X-Owner-Token 헤더 첨부
 
 QR 스캔 → GET /profiles/{id}로 미리보기 → POST /saved-profiles로 저장
