@@ -6,7 +6,6 @@ import com.getit.qrprofile.domain.savedprofile.entity.SavedProfile;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 public class SavedProfileResponse {
@@ -42,44 +41,15 @@ public class SavedProfileResponse {
     @Getter
     public static class Detail {
         private Long savedProfileId;
-        private TargetProfileDto profile;
+        private ProfileResponse profile;
         private boolean honorific;
         private String memo;
 
         public Detail(SavedProfile savedProfile) {
             this.savedProfileId = savedProfile.getId();
-            this.profile = new TargetProfileDto(savedProfile.getTarget());
+            this.profile = ProfileResponse.from(savedProfile.getTarget());
             this.honorific = savedProfile.isHonorific();
             this.memo = savedProfile.getMemo();
-        }
-    }
-
-    @Getter
-    public static class TargetProfileDto {
-        private UUID profileId;
-        private String name;
-        private Integer age;
-        private String school;
-        private String department;
-        private String major;
-        private String studentId;
-        private String mbti;
-        private String instagram;
-        private List<String> clubs;
-        private String photoUrl;
-
-        public TargetProfileDto(Profile profile) {
-            this.profileId = profile.getId();
-            this.name = profile.getName();
-            this.age = profile.getAge();
-            this.school = profile.getSchool();
-            this.department = profile.getDepartment();
-            this.major = profile.getMajor();
-            this.studentId = profile.getStudentId();
-            this.mbti = profile.getMbti();
-            this.instagram = profile.getInstagram();
-            this.clubs = profile.getClubs() != null ? List.copyOf(profile.getClubs()) : List.of();
-            this.photoUrl = profile.getPhotoUrl();
         }
     }
 
