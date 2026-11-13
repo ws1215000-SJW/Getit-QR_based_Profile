@@ -32,6 +32,11 @@ export async function getOrCreateQrId(): Promise<string> {
   }
 }
 
+// 새 프로필을 만들어야 할 때(이미 서버에 있는 ID 등) 기존 ID 버리기
+export async function resetQrId(): Promise<void> {
+  await AsyncStorage.removeItem(QR_ID_KEY);
+}
+
 // QR 안에 넣을 데이터 형식
 export function buildQrValue(id: string): string {
   return `getit:profile:${id}`;

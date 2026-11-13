@@ -1,126 +1,77 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
-  ImageSourcePropType,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/* ───────────── 타입 & 데이터 ───────────── */
+import {
+  errorMessage,
+  getSavedProfiles,
+  updateSavedProfile,
+  type SavedProfileSummary,
+} from "../../lib/api";
 
-export type Profile = {
-  id: number;
-  name: string;
-  age: number;
-  school: string;
-  department: string;
-  major: string;
-  studentId: string;
-  mbti: string;
-  instagram: string;
-  club: string;
-  image: ImageSourcePropType;
-  honorific: boolean;
-  memo: string;
-};
+/* ───────────── 타입 ─────────────
+   서버(GET /saved-profiles) 응답 그대로 사용. id = savedProfileId */
+export type Profile = SavedProfileSummary;
 
-// 이미지는 assets/profiles/ 폴더에 넣어주세요 (RN은 require 경로가 정적이어야 함)
-const initialProfiles: Profile[] = [
-  {
-    id: 1,
-    name: "김서연",
-    age: 22,
-    school: "연세대학교",
-    department: "시각디자인학과",
-    major: "브랜드 디자인",
-    studentId: "21학번",
-    mbti: "ENFP",
-    instagram: "@seoyeon.zip",
-    club: "사진 동아리 포커스",
-    image: require("../../../assets/profiles/seoyeon.jpg"),
-    honorific: false,
-    memo: "",
-  },
-  {
-    id: 2,
-    name: "박민준",
-    age: 24,
-    school: "고려대학교",
-    department: "컴퓨터학과",
-    major: "소프트웨어",
-    studentId: "20학번",
-    mbti: "ISTP",
-    instagram: "@mjun.dev",
-    club: "개발 동아리 KUCC",
-    image: require("../../../assets/profiles/minjun.jpg"),
-    honorific: true,
-    memo: "",
-  },
-  {
-    id: 3,
-    name: "이하늘",
-    age: 21,
-    school: "성균관대학교",
-    department: "미디어커뮤니케이션학과",
-    major: "디지털 미디어",
-    studentId: "23학번",
-    mbti: "ISFJ",
-    instagram: "@haneul.day",
-    club: "방송 동아리 SUBS",
-    image: require("../../../assets/profiles/haneul.jpg"),
-    honorific: true,
-    memo: "",
-  },
-  {
-    id: 4,
-    name: "정우진",
-    age: 23,
-    school: "한양대학교",
-    department: "건축학부",
-    major: "건축 설계",
-    studentId: "22학번",
-    mbti: "INTJ",
-    instagram: "@woozin.arch",
-    club: "러닝 크루 하이라이트",
-    image: require("../../../assets/profiles/woozi.jpg"),
-    honorific: false,
-    memo: "",
-  },
-];
+/* ───────────── 서버에서 저장 목록 불러오기 ───────────── */
 
-/* ───────────── 화면 간 공유 상태 (간단한 전역 저장소) ─────────────
-   웹에서는 App 하나가 state를 들고 있었지만, 화면이 두 파일로 나뉘면
-   state를 공유할 곳이 필요합니다. _layout.tsx 등 다른 파일을 건드리지 않도록
-   이 파일 안에 저장소를 두고 profile_detail.tsx에서 가져다 씁니다. */
+function useSavedProfiles() {
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-let store: Profile[] = initialProfiles;
-const listeners = new Set<() => void>();
+  const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
+    if (mode === "refresh") setRefreshing(true);
+    setError(null);
+    try {
+      setProfiles(await getSavedProfiles());
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
-const getSnapshot = () => store;
+  // 화면에 들어올 때마다 최신 목록 (상세에서 존댓말을 바꾸고 돌아와도 반영)
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
-export function useProfiles() {
-     const profiles = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-  const updateProfile = (id: number, update: Partial<Profile>) => {
-    store = store.map((p) => (p.id === id ? { ...p, ...update } : p));
-    listeners.forEach((l) => l());
+  // 존댓말 토글: 화면 먼저 바꾸고 서버 저장, 실패하면 되돌림
+  const updateHonorific = async (savedProfileId: number, honorific: boolean) => {
+    setProfiles((prev) =>
+      prev.map((p) => (p.savedProfileId === savedProfileId ? { ...p, honorific } : p))
+    );
+    try {
+      await updateSavedProfile(savedProfileId, { honorific });
+    } catch (e) {
+      setProfiles((prev) =>
+        prev.map((p) =>
+          p.savedProfileId === savedProfileId ? { ...p, honorific: !honorific } : p
+        )
+      );
+      Alert.alert("저장 실패", errorMessage(e));
+    }
   };
 
-  return { profiles, updateProfile };
+  return { profiles, loading, refreshing, error, load, updateHonorific };
 }
 
 /* ───────────── 하단 메뉴 ─────────────
@@ -191,7 +142,8 @@ function BottomNav() {
 
 export default function ProfileList() {
   const router = useRouter();
-  const { profiles, updateProfile } = useProfiles();
+  const { profiles, loading, refreshing, error, load, updateHonorific } =
+    useSavedProfiles();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "honorific" | "casual">("all");
 
@@ -213,6 +165,9 @@ export default function ProfileList() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load("refresh")} />
+        }
       >
         <Text style={styles.eyebrow}>MY CONNECTIONS</Text>
         <Text style={styles.title}>저장한 프로필</Text>
@@ -296,15 +251,21 @@ export default function ProfileList() {
         <View style={{ gap: 13 }}>
           {filteredProfiles.map((profile) => (
             <Pressable
-              key={profile.id}
+              key={profile.savedProfileId}
               style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
               onPress={() => router.push({
                 pathname: "/profile_detail/[id]",
-                params: { id: String(profile.id) },
+                params: { id: String(profile.savedProfileId) },
                 })
               }
             >
-              <Image source={profile.image} style={styles.cardImage} />
+              {profile.photoUrl ? (
+                <Image source={{ uri: profile.photoUrl }} style={styles.cardImage} />
+              ) : (
+                <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
+                  <Text style={styles.cardImageText}>{profile.name.slice(0, 2)}</Text>
+                </View>
+              )}
               <View style={styles.summary}>
                 <View style={styles.cardTitleRow}>
                   <Text style={styles.cardName}>{profile.name}</Text>
@@ -314,11 +275,15 @@ export default function ProfileList() {
                   {profile.school}
                 </Text>
                 <Text style={styles.cardDept} numberOfLines={1}>
-                  {profile.department} · {profile.studentId}
+                  {profile.studentId
+                    ? `${profile.department} · ${profile.studentId}`
+                    : profile.department}
                 </Text>
-                <View style={styles.mbtiBadge}>
-                  <Text style={styles.mbtiText}>{profile.mbti}</Text>
-                </View>
+                {profile.mbti ? (
+                  <View style={styles.mbtiBadge}>
+                    <Text style={styles.mbtiText}>{profile.mbti}</Text>
+                  </View>
+                ) : null}
               </View>
 
               <Ionicons
@@ -331,16 +296,50 @@ export default function ProfileList() {
                 <SpeechToggle
                   honorific={profile.honorific}
                   onChange={(value) =>
-                    updateProfile(profile.id, {
-                      honorific: value,
-                    })
+                    updateHonorific(profile.savedProfileId, value)
                   }
                 />
               </View>
             </Pressable>
           ))}
 
-          {filteredProfiles.length === 0 && (
+          {loading && (
+            <View style={styles.empty}>
+              <ActivityIndicator size="large" color={PURPLE} />
+              <Text style={styles.emptyDesc}>저장한 프로필을 불러오는 중...</Text>
+            </View>
+          )}
+
+          {!loading && error && (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="cloud-offline-outline" size={26} color={PURPLE} />
+              </View>
+              <Text style={styles.emptyTitle}>목록을 불러오지 못했어요</Text>
+              <Text style={styles.emptyDesc}>{error}</Text>
+              <Pressable onPress={() => load()} style={styles.emptyAction}>
+                <Text style={styles.emptyActionText}>다시 시도</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {!loading && !error && profiles.length === 0 && (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="qr-code-outline" size={26} color={PURPLE} />
+              </View>
+              <Text style={styles.emptyTitle}>아직 저장한 프로필이 없어요</Text>
+              <Text style={styles.emptyDesc}>새로 만난 사람의 QR을 스캔해 보세요.</Text>
+              <Pressable
+                onPress={() => router.push("/qr_scanner")}
+                style={styles.emptyAction}
+              >
+                <Text style={styles.emptyActionText}>QR 스캔하기</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {!loading && !error && profiles.length > 0 && filteredProfiles.length === 0 && (
             <View style={styles.empty}>
               <View style={styles.emptyIcon}>
                 <Ionicons name="search-outline" size={26} color={PURPLE} />
@@ -491,6 +490,20 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardImage: { width: 116, height: 136, borderRadius: 23 },
+  cardImagePlaceholder: {
+    backgroundColor: "#ece8ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardImageText: { fontSize: 26, fontWeight: "800", color: PURPLE },
+  emptyAction: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: PURPLE,
+  },
+  emptyActionText: { color: "#ffffff", fontSize: 14, fontWeight: "700" },
   summary: { flex: 1, minWidth: 0, paddingTop: 5 },
   cardTitleRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
   cardName: { fontSize: 18, fontWeight: "800", letterSpacing: -0.7, color: "#172033" },

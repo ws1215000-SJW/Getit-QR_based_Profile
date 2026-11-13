@@ -20,6 +20,7 @@ import {
 } from "../../lib/profileStorage";
 
 import QRCode from "react-native-qrcode-svg";
+import { errorMessage } from "../../lib/api";
 
 import {
   getOrCreateQrId,
@@ -65,7 +66,8 @@ export default function ProfileMainScreen() {
             return;
           }
 
-          const id = await getOrCreateQrId();
+          // QR에는 서버에 저장된 내 프로필 ID를 넣음
+          const id = saved.id ?? (await getOrCreateQrId());
 
           if (!active) return;
 
@@ -77,10 +79,7 @@ export default function ProfileMainScreen() {
 
           if (active) {
             setError(true);
-            Alert.alert(
-              "조회 오류",
-              "프로필 정보를 불러오지 못했습니다."
-            );
+            Alert.alert("조회 오류", errorMessage(err));
           }
         } finally {
           if (active) setLoading(false);

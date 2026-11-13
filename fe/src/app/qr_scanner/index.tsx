@@ -3,6 +3,7 @@ import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +16,14 @@ import {
 } from "expo-camera";
 import { router, useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import {
+  ApiError,
+  errorMessage,
+  getProfileById,
+  saveProfile,
+  type ServerProfile,
+} from "../../lib/api";
 
 const PRIMARY = "#7357F6";
 
@@ -31,6 +40,12 @@ export default function QrScannerScreen() {
   const [scanned, setScanned] = useState(false);
   const [scannedId, setScannedId] = useState<string | null>(null);
 
+  // 스캔한 상대 프로필 미리보기
+  const [preview, setPreview] = useState<ServerProfile | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   // 동일한 QR이 연속으로 인식되는 문제 방지
   const scanningLocked = useRef(false);
 
@@ -38,6 +53,54 @@ export default function QrScannerScreen() {
     scanningLocked.current = false;
     setScanned(false);
     setScannedId(null);
+    setPreview(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+    setSaving(false);
+  };
+
+  // 서버에서 상대 프로필 불러오기
+  const loadPreview = async (profileId: string) => {
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      setPreview(await getProfileById(profileId));
+    } catch (error) {
+      setPreviewError(
+        error instanceof ApiError && error.code === "PROFILE_NOT_FOUND"
+          ? "아직 프로필을 만들지 않은 QR이에요."
+          : errorMessage(error)
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // 내 인맥 목록에 저장
+  const handleSave = async () => {
+    if (!preview || saving) return;
+    setSaving(true);
+    try {
+      const { savedProfileId } = await saveProfile(preview.id);
+      router.replace({
+        pathname: "/profile_detail/[id]",
+        params: { id: String(savedProfileId) },
+      });
+    } catch (error) {
+      setSaving(false);
+      if (error instanceof ApiError && error.code === "ALREADY_SAVED") {
+        Alert.alert("이미 저장한 프로필이에요", "저장 목록에서 확인할 수 있어요.", [
+          { text: "다시 스캔", onPress: resetScan },
+          { text: "목록 보기", onPress: () => router.replace("/profile_list") },
+        ]);
+      } else if (error instanceof ApiError && error.code === "CANNOT_SAVE_SELF") {
+        Alert.alert("내 QR이에요", "자기 자신은 저장할 수 없어요.", [
+          { text: "다시 스캔", onPress: resetScan },
+        ]);
+      } else {
+        Alert.alert("저장 실패", errorMessage(error));
+      }
+    }
   };
 
   const handleBarcodeScanned = (
@@ -68,10 +131,9 @@ export default function QrScannerScreen() {
       return;
     }
 
-    const profileId = match[1];
+    const profileId = match[1].toLowerCase();
     setScannedId(profileId);
-
-    console.log("스캔한 프로필 ID:", profileId);
+    loadPreview(profileId);
   };
 
   // 권한 상태 로딩
@@ -182,31 +244,65 @@ export default function QrScannerScreen() {
         ]}
       >
         {scannedId ? (
-          <>
-            <Text style={styles.resultTitle}>
-              QR 인식 성공!
-            </Text>
-
-            <Text style={styles.resultDescription}>
-              Getit 프로필 ID를 확인했어요.
-            </Text>
-
-            <Text
-              style={styles.resultId}
-              selectable
-            >
-              {scannedId}
-            </Text>
-
-            <Pressable
-              style={styles.primaryButton}
-              onPress={resetScan}
-            >
-              <Text style={styles.primaryButtonText}>
-                다른 QR 스캔
+          previewLoading ? (
+            <>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.resultDescription}>
+                상대 프로필을 불러오는 중...
               </Text>
-            </Pressable>
-          </>
+            </>
+          ) : preview ? (
+            <>
+              <View style={styles.previewRow}>
+                <View style={styles.previewAvatar}>
+                  {preview.photoUrl ? (
+                    <Image
+                      source={{ uri: preview.photoUrl }}
+                      style={styles.previewAvatarImage}
+                    />
+                  ) : (
+                    <Text style={styles.previewAvatarText}>
+                      {preview.name.slice(0, 2)}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.resultTitle} numberOfLines={1}>
+                    {preview.name}{" "}
+                    <Text style={styles.previewAge}>{preview.age}세</Text>
+                  </Text>
+                  <Text style={styles.previewSub} numberOfLines={1}>
+                    {preview.school} · {preview.department}
+                  </Text>
+                  {preview.mbti ? (
+                    <Text style={styles.previewMbti}>{preview.mbti}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <Pressable
+                style={[styles.primaryButton, saving && { opacity: 0.6 }]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {saving ? "저장 중..." : "내 인맥에 저장하기"}
+                </Text>
+              </Pressable>
+
+              <Pressable style={styles.secondaryButton} onPress={resetScan}>
+                <Text style={styles.secondaryButtonLight}>다른 QR 스캔</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.resultTitle}>프로필을 불러오지 못했어요</Text>
+              <Text style={styles.resultDescription}>{previewError}</Text>
+              <Pressable style={styles.primaryButton} onPress={resetScan}>
+                <Text style={styles.primaryButtonText}>다시 스캔</Text>
+              </Pressable>
+            </>
+          )
         ) : (
           <Text style={styles.guideText}>
             QR코드를 사각형 안에 맞춰 주세요.
@@ -386,6 +482,65 @@ const styles = StyleSheet.create({
   secondaryButton: {
     padding: 15,
     marginTop: 12,
+  },
+
+  secondaryButtonLight: {
+    color: "#D7D1E7",
+    fontSize: 14,
+  },
+
+  previewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    alignSelf: "stretch",
+    marginBottom: 8,
+  },
+
+  previewAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#DDD5FF",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  previewAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  previewAvatarText: {
+    color: PRIMARY,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+
+  previewAge: {
+    color: "#D7D1E7",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  previewSub: {
+    color: "#D7D1E7",
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  previewMbti: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "rgba(197, 184, 255, 0.2)",
+    color: "#C5B8FF",
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   secondaryButtonText: {

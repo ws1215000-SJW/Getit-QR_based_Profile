@@ -16,9 +16,11 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as ImagePicker from "expo-image-picker";
 
 import {
+  getLegacyLocalProfile,
   getMyProfile,
   saveMyProfile,
 } from "../../lib/profileStorage";
+import { errorMessage } from "../../lib/api";
 
 type ProfileForm = {
   name: string;
@@ -59,6 +61,7 @@ export default function ProfileWriteScreen() {
 
   const [form, setForm] = useState<ProfileForm>({ ...EMPTY_FORM });
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoMimeType, setPhotoMimeType] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState(false);
   const [clubs, setClubs] = useState<string[]>([]);
   const [clubInput, setClubInput] = useState("");
@@ -79,12 +82,14 @@ export default function ProfileWriteScreen() {
         setIsLoading(true);
 
         try {
-          const saved = await getMyProfile();
+          const serverProfile = await getMyProfile();
+          // 서버 연동 전에 기기에만 저장해둔 프로필이 있으면 미리 채워줌
+          const saved = serverProfile ?? (await getLegacyLocalProfile());
 
           if (!active) return;
 
           if (saved) {
-            setIsEditMode(true);
+            setIsEditMode(serverProfile !== null);
             setForm({
               name: saved.name ?? "",
               age: String(saved.age ?? ""),
@@ -96,6 +101,7 @@ export default function ProfileWriteScreen() {
             });
             setClubs(saved.clubs ?? []);
             setPhotoUri(normalizePhotoUri(saved.photoUri));
+            setPhotoMimeType(null);
           } else {
             setIsEditMode(false);
             setForm({ ...EMPTY_FORM });
@@ -107,7 +113,7 @@ export default function ProfileWriteScreen() {
           setClubInput("");
         } catch (error) {
           console.error("프로필 조회 실패:", error);
-          Alert.alert("오류", "프로필을 불러오지 못했습니다.");
+          Alert.alert("오류", `프로필을 불러오지 못했습니다.\n${errorMessage(error)}`);
         } finally {
           if (active) setIsLoading(false);
         }
@@ -144,6 +150,7 @@ export default function ProfileWriteScreen() {
       if (!result.canceled && result.assets.length > 0) {
         setPhotoError(false);
         setPhotoUri(normalizePhotoUri(result.assets[0].uri));
+        setPhotoMimeType(result.assets[0].mimeType ?? null);
       }
     } catch (error) {
       console.error("사진 선택 실패:", error);
@@ -156,6 +163,7 @@ export default function ProfileWriteScreen() {
     if (isSaving) return;
 
     setPhotoUri(null);
+    setPhotoMimeType(null);
     setPhotoError(false);
   };
 
@@ -251,7 +259,8 @@ export default function ProfileWriteScreen() {
     setIsSaving(true);
 
     try {
-      await saveMyProfile(profileData);
+      // 서버에 저장 (처음이면 생성 + 토큰 발급, 사진이 바뀌었으면 업로드/삭제)
+      await saveMyProfile(profileData, photoMimeType);
 
       if (isEditMode) {
         goBackToMain();
@@ -260,10 +269,7 @@ export default function ProfileWriteScreen() {
       }
     } catch (error) {
       console.error("프로필 저장 실패:", error);
-      Alert.alert(
-        "저장 실패",
-        "프로필을 저장하지 못했습니다."
-      );
+      Alert.alert("저장 실패", errorMessage(error));
     } finally {
       setIsSaving(false);
     }
